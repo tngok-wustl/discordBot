@@ -30,20 +30,24 @@ class EventManager(object):
         :return:
         :rtype: None
         """
-        try:
+        try: # try to parse the date from user input
             timeToSend = dateparser.parse(time, settings=self.settings)
-        except ValueError:
+        except ValueError: # if the date is not in a recognised format
             await ctx.reply('That date was not in a recognized format.')
             return
-        if timeToSend is None:
+        if timeToSend is None: # if no date is provided
             await ctx.reply('That date was not in a recognized format.')
             return
         if datetime.now(self.serverTimezone) < timeToSend:  # If the event is in the future
+            # create a new event, with user-given message, user-given time and pre-defined timezone
             eventAdded = Event(ctx, message, timeToSend, self.serverTimezone)
+
+            # determine how many seconds still remain until the event happens
             eventAdded.future = asyncio.create_task(makeCallback(eventAdded.secondsRemaining(), self.sendEvent(eventAdded)))
-            self.dictionary[hash(eventAdded)] = eventAdded
+            
+            self.dictionary[hash(eventAdded)] = eventAdded # add new event as value to the events dictionary
             await ctx.reply(f"Event created. ID:{hash(eventAdded)}")
-        else:
+        else: # if the time given is in the past
             await ctx.reply('Please enter a time in the future.')
 
     async def sendEvent(self, event: Event):
@@ -88,7 +92,7 @@ class EventManager(object):
         :param eventKey: The integer hash of the event to be deleted
         :return: None
         """
-        self.removeEvent(self.dictionary[eventKey])
+        self.removeEvent(self.dictionary[eventKey]) # remove the given event from the events dictionary
 
     def numEvents(self) -> int:
         """

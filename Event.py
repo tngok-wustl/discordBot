@@ -34,4 +34,7 @@ class Event(object):
         return abs(hash((self.ctx, self.message, self.time)))  # Absolute value limits total options, but still a ton.
 
     def secondsRemaining(self):
+        """
+        Checks the time difference from now to the event time in seconds
+        """
         return (self.time - datetime.now(self.timezone)).total_seconds()

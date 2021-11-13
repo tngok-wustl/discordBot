@@ -4,12 +4,13 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from PrinterManager import PrinterManager
-from Rules import Rules
+# from Rules import Rules
 from EventManager import EventManager
 from SpaceManager import SpaceManager
 from Sheets import Sheet
 from fastapi import FastAPI
 import uvicorn
+from github import Github
 
 
 app = FastAPI()
@@ -22,6 +23,10 @@ person_list = SpaceManager()
 printersManager = PrinterManager()
 max_occupancy = int(os.getenv('max_occupancy'))
 Sheets = Sheet(os.getenv('SPREADSHEET_ID'))
+
+# get github token from .env
+my_token = os.getenv("GITHUB_TOKEN")
+g = Github(my_token)
 
 
 @app.on_event("startup")
@@ -73,6 +78,12 @@ async def test(ctx):
     await ctx.reply('test success!')
 
 
+"""
+This method searches inside the year dictionary in the Rule class inside Rule.py.
+If a user-entered year (year: str) is a key of the dictionary, then the bot
+will return the rule of the given year (i.e. dictionary value corresponding to the key);
+otherwise, the bot shall leave an error message.
+"""
 @bot.command(name='rules', help='Sends the DBF rules for a particular year')
 async def rules(ctx, year: str):
     """
@@ -81,14 +92,49 @@ async def rules(ctx, year: str):
     :param year: year for rules
     :return: None
     """
-    try:
+    # try:
+    #     rulesEmbed = discord.Embed(title=f"{year} rules", color=embedDefaultColor)
+
+    #     # try to search the user-given year among the Rules dictionary keys
+    #     # and get the rule of that year 
+    #     rulesEmbed.description = f"[**Click here**]({Rules.years[int(year)]})"
+
+    #     await ctx.reply(embed=rulesEmbed) # print out the rule of that year
+    # except KeyError:
+    #     # user-given year not found in dictionary: print out error message
+    #     await ctx.reply(f"We do not have rules for the year {year} in our database")
+
+    # if the rule is in the Git repository, still return rule
+    # else: error
+
+    # using PyGithub to access the rules archive
+    rulesArch = "Rules Archive"
+    repo = g.get_repo("WUDBF/WUDBF2022")
+    contents = repo.get_contents(rulesArch)
+    
+    DBF_rules = list()
+    for file in contents:
+        if file.path.endswith("_dbf_rules.pdf"): # rules files are PDF files
+            # record all years that exist in the rules archive as integers
+            DBF_rules.append(int(file.path.replace(rulesArch, '')[1:5]))
+    
+    # check whether the user-given year exists in the rules archive
+    if int(year) in DBF_rules: # will give error if the input year isn't an integer
         rulesEmbed = discord.Embed(title=f"{year} rules", color=embedDefaultColor)
-        rulesEmbed.description = f"[**Click here**]({Rules.years[int(year)]})"
-        await ctx.reply(embed=rulesEmbed)
-    except KeyError:
-        await ctx.reply(f"We do not have rules for the year {year} in our database")
+
+        # get the rule of the user-given year (if it exists in the rules archive)
+        rule_URL_root = "https://github.com/WUDBF/WUDBF2022/blob/main/Rules%20Archive/"
+        rulesEmbed.description = f"[**Click here**]({rule_URL_root + year}_dbf_rules.pdf)"
+
+        await ctx.reply(embed=rulesEmbed) # print out the rule of that year
+    else:
+        # user-given year doesn't exist in the rules archive (print out warning message)
+        await ctx.reply(f"We do not have rules for the year {year} in our database.")
 
 
+"""
+This function adds an event, with a string message and a time given
+"""
 @bot.command(name='remindme', help='Creates a future event with a specific message.')
 async def remindme(ctx, message: str, time: str):
     """
@@ -101,6 +147,9 @@ async def remindme(ctx, message: str, time: str):
     await events.addEvent(ctx, message, time)
 
 
+"""
+This function deletes an event based using the based on the eventKey (i.e. event ID)
+"""
 @bot.command(name='delete', help='Deletes an event. Ex: <delete 2>. Use list command to get event numbers.')
 async def delete(ctx, eventKey: str):
     """
@@ -113,16 +162,20 @@ async def delete(ctx, eventKey: str):
     isAuthor = ctx.message.author == events.dictionary[int(eventKey)].ctx.message.author
     if isAdmin or isAuthor:
         try:
+            # remove event with ID eventKey from the events dictionary
             events.removeEventByKey(int(eventKey))
             await ctx.reply('Event deleted.')
-        except KeyError:
+        except KeyError: # if a given event ID is not found
             await ctx.reply('That event was not found.')
-        except ValueError:
+        except ValueError: # if an event value is not found
             await ctx.reply('Please enter the number from the list of the reminder you would like to delete')
-    else:
+    else: # non administrators or event authors aren't authorised to delete an event
         await ctx.reply('You are not authorized to delete that message.')
 
 
+"""
+
+"""
 @bot.command(name='list', help='Lists all upcoming events with message and time')
 async def listEvents(ctx):
     """
@@ -130,6 +183,7 @@ async def listEvents(ctx):
     :param ctx: context of the message
     :return: None
     """
+    # print out a list of all currently stored events
     listEmbed = discord.Embed(title='__**Upcoming events:**__', description=f"```prolog\n{events.listEvents()}\n```",
                               color=embedDefaultColor)
     await ctx.reply(embed=listEmbed)
@@ -206,7 +260,6 @@ async def notifyPeople(ctx):
         await member.send("The space is over capacity!")
 
 
-"""
 @bot.command(name='checkin', help='Checks you into the DBF space.')
 async def checkin(ctx):
     if ctx.message.author.display_name in person_list.occupants:
@@ -248,7 +301,6 @@ async def resetlog(ctx):
         await ctx.reply("The log has been reset")
     else:
         await ctx.reply("You do not have permissions to perform this action")
-"""
 
 
 if __name__ == "__main__":
